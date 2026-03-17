@@ -3,12 +3,10 @@ local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 local LocalPlayer = Players.LocalPlayer
 
--- Biến kiểm soát trạng thái
 local isFlinging = false
-local currentTarget = nil
 
--- Hàm thông báo (Revert/Notify System)
-local function notify(title, text)
+-- Hàm thông báo trạng thái
+local function sendNotification(title, text)
     StarterGui:SetCore("SendNotification", {
         Title = title,
         Text = text,
@@ -16,78 +14,96 @@ local function notify(title, text)
     })
 end
 
--- TẠO GIAO DIỆN MENU (GUI)
+-- TẠO GIAO DIỆN (Đảm bảo không mất nút)
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "FlingMenuGui"
+screenGui.Name = "FlingAllSystem"
+screenGui.ResetOnSpawn = false -- Giữ menu cố định khi nhân vật reset
 screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
-local mainButton = Instance.new("TextButton")
-mainButton.Size = UDim2.new(0, 150, 0, 50)
-mainButton.Position = UDim2.new(0.05, 0, 0.4, 0) -- Vị trí bên trái màn hình
-mainButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-mainButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-mainButton.Text = "BẬT FLING"
-mainButton.Font = Enum.Font.SourceSansBold
-mainButton.TextSize = 20
-mainButton.Parent = screenGui
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 160, 0, 50)
+toggleButton.Position = UDim2.new(0.05, 0, 0.4, 0)
+toggleButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+toggleButton.Text = "FLING ALL: TẮT"
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.TextSize = 18
+toggleButton.Parent = screenGui
 
--- Bo góc cho nút
-local uiCorner = Instance.new("UICorner")
-uiCorner.CornerRadius = UDim.new(0, 8)
-uiCorner.Parent = mainButton
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 10)
+corner.Parent = toggleButton
 
--- HÀM XỬ LÝ FLING
-local function startFlingLoop()
+-- LOGIC FLING ALL
+local function executeFlingAll()
     while isFlinging do
-        local playerList = Players:GetPlayers()
-        
-        for _, target in pairs(playerList) do
-            if not isFlinging then break end -- Dừng ngay nếu nhấn Tắt
+        local allPlayers = Players:GetPlayers()
+        local hasTarget = false
+
+        for _, target in pairs(allPlayers) do
+            if not isFlinging then break end
             
+            -- Loại bỏ chính mình và kiểm tra nhân vật mục tiêu
             if target ~= LocalPlayer and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
                 local myChar = LocalPlayer.Character
                 local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-                local targetRoot = target.Character:FindFirstChild("HumanoidRootPart")
+                local targetRoot = target.Character.HumanoidRootPart
                 
                 if myRoot and targetRoot then
-                    notify("Flinging", "Đang áp sát: " .. target.Name)
+                    hasTarget = true
                     
-                    -- Tạo lực xoay cực mạnh
-                    local bav = Instance.new("BodyAngularVelocity")
-                    bav.P = 1000000
-                    bav.MaxTorque = Vector3.new(1, 1, 1) * 999999
-                    bav.AngularVelocity = Vector3.new(0, 9999, 0)
-                    bav.Parent = myRoot
+                    -- Kích hoạt lực vật lý (Xoay cực mạnh)
+                    local force = Instance.new("BodyAngularVelocity")
+                    force.Name = "FlingForce"
+                    force.P = 1500000
+                    force.MaxTorque = Vector3.new(1, 1, 1) * 9999999
+                    force.AngularVelocity = Vector3.new(0, 9500, 0)
+                    force.Parent = myRoot
                     
-                    -- Áp sát liên tục trong 1.5 giây
-                    local start = tick()
-                    while tick() - start < 1.5 and isFlinging do
+                    -- Áp sát và duy trì lực trong khoảng thời gian ngắn (1 giây mỗi người)
+                    local startTime = tick()
+                    while tick() - startTime < 1 and isFlinging do
                         RunService.Heartbeat:Wait()
-                        myRoot.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 1)
-                        myRoot.Velocity = Vector3.new(999, 999, 999)
+                        -- Dịch chuyển sát mục tiêu để tạo va chạm
+                        myRoot.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 0.2)
+                        myRoot.Velocity = Vector3.new(1000, 1000, 1000)
                     end
                     
-                    bav:Destroy() -- Reset lực xoay
-                    task.wait(0.2)
+                    -- Xóa lực để trở về trạng thái gốc trước khi sang mục tiêu mới
+                    force:Destroy()
+                    myRoot.Velocity = Vector3.new(0, 0, 0)
+                    task.wait(0.1) 
                 end
             end
         end
-        task.wait(1) -- Nghỉ 1 giây trước khi lặp lại toàn server
+        
+        if not hasTarget then
+            task.wait(1) -- Đợi nếu server không còn ai hợp lệ
+        end
     end
 end
 
--- SỰ KIỆN CLICK NÚT
-mainButton.MouseButton1Click:Connect(function()
+-- XỬ LÝ SỰ KIỆN BẬT/TẮT
+toggleButton.MouseButton1Click:Connect(function()
     isFlinging = not isFlinging
     
     if isFlinging then
-        mainButton.Text = "ĐANG CHẠY..."
-        mainButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50) -- Đổi sang màu đỏ
-        notify("Hệ thống", "Đã kích hoạt Fling toàn server!")
-        startFlingLoop()
+        toggleButton.Text = "FLING ALL: BẬT"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        sendNotification("Hệ thống", "Đã kích hoạt chế độ Fling All.")
+        executeFlingAll()
     else
-        mainButton.Text = "BẬT FLING"
-        mainButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40) -- Về màu gốc
-        notify("Hệ thống", "Đã tắt và revert trạng thái gốc.")
+        toggleButton.Text = "FLING ALL: TẮT"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+        
+        -- Dọn dẹp mọi lực còn sót lại để nhân vật trở lại bình thường
+        local myChar = LocalPlayer.Character
+        if myChar and myChar:FindFirstChild("HumanoidRootPart") then
+            local force = myChar.HumanoidRootPart:FindFirstChild("FlingForce")
+            if force then force:Destroy() end
+            myChar.HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+        end
+        
+        sendNotification("Hệ thống", "Đã tắt. Trạng thái nhân vật được khôi phục.")
     end
 end)
