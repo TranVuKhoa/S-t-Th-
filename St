@@ -1,32 +1,28 @@
--- [[ VŨ KHOA V60 - GENESIS EDITION ]]
--- [[ CƠ CHẾ: BACKPACK DAMAGE INJECTION - KHÔNG CẦM KIẾM - KHÔNG CLICK ]]
+-- [[ VŨ KHOA V60 - ETERNAL DAMAGE ]]
+-- [[ CƠ CHẾ: CHẠM 1 LẦN - RÚT MÁU VĨNH VIỄN + GÔM ẨN ]]
 
 local lp = game:GetService("Players").LocalPlayer
 local runService = game:GetService("RunService")
-local task = task
 
 local config = {
     kill = false,
     ghostMagnet = false,
-    hSize = 15000, 
-    burst = 15000 -- Cường độ "vả" sát thương (siêu cao để chết 0s)
+    hSize = 2500,
+    speed = 150 -- Tốc độ vắt máu
 }
 
-local victimList = {}
+local targets = {} -- Danh sách đối thủ đã bị "dính" sát thương
 
--- [[ ENGINE DIỆT TẬN GỐC TỪ TÚI ĐỒ ]]
-runService.Heartbeat:Connect(function()
+-- [[ 1. HỆ THỐNG GÂY SÁT THƯƠNG VĨNH VIỄN ]]
+runService.Stepped:Connect(function()
     if config.kill then
         pcall(function()
             local char = lp.Character
             if not char then return end
-
-            -- TÌM VŨ KHÍ TRONG BACKPACK HOẶC TRÊN TAY
-            local tool = lp.Backpack:FindFirstChildOfClass("Tool") or char:FindFirstChildOfClass("Tool")
-            if not tool then return end
             
-            -- LẤY LƯỠI KIẾM/BỘ PHẬN GÂY ĐAM
-            local blade = tool:FindFirstChild("Handle") or tool:FindFirstChildOfClass("Part") or tool:FindFirstChildOfClass("MeshPart")
+            local tool = char:FindFirstChildOfClass("Tool") or lp.Backpack:FindFirstChildOfClass("Tool")
+            local blade = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildOfClass("Part"))
+            
             if not blade then return end
 
             for _, p in pairs(game.Players:GetPlayers()) do
@@ -35,29 +31,31 @@ runService.Heartbeat:Connect(function()
                     local tHum = p.Character:FindFirstChildOfClass("Humanoid")
 
                     if tHum and tHum.Health > 0 then
-                        -- GÔM ẨN CỰC MẠNH
+                        -- GÔM ẨN (INVISIBLE MAGNET)
                         if config.ghostMagnet then
-                            tHRP.CFrame = char.HumanoidRootPart.CFrame * CFrame.new(0, 0, -5)
+                            tHRP.CFrame = char.HumanoidRootPart.CFrame * CFrame.new(0, 0, -4)
                             tHRP.Velocity = Vector3.zero
                         end
 
-                        -- HITBOX TÀNG HÌNH (MAX TẦM)
+                        -- HITBOX ĐỎ
                         tHRP.Size = Vector3.new(config.hSize, config.hSize, config.hSize)
+                        tHRP.Color = Color3.fromRGB(255, 0, 0)
+                        tHRP.Transparency = 0.8
                         tHRP.CanCollide = false
 
-                        -- LUỒNG SÁT THƯƠNG "MA" (GÂY ĐAM TỪ XA)
-                        if not victimList[p.Name] then
-                            victimList[p.Name] = true
+                        -- KÍCH HOẠT VÒNG LẶP SÁT THƯƠNG VĨ NHIÊN (CHỈ CẦN CHẠM 1 LẦN)
+                        if not targets[p.Name] then
+                            targets[p.Name] = true
                             task.spawn(function()
-                                while victimList[p.Name] and tHum and tHum.Health > 0 and config.kill do
-                                    -- Bơm 4000 nhát chém/tick trực tiếp từ túi đồ
-                                    for i = 1, config.burst do
+                                while targets[p.Name] and tHum and tHum.Health > 0 and config.kill do
+                                    -- Gửi sát thương liên tục mà không cần bro phải chém lại
+                                    for i = 1, config.speed do
                                         firetouchinterest(tHRP, blade, 0)
                                         firetouchinterest(tHRP, blade, 1)
                                     end
-                                    task.wait() 
+                                    task.wait(0.1) -- Giãn cách nhẹ để tránh crash
                                 end
-                                victimList[p.Name] = nil
+                                targets[p.Name] = nil -- Reset khi đối thủ chết
                             end)
                         end
                     end
@@ -65,28 +63,28 @@ runService.Heartbeat:Connect(function()
             end
         end)
     else
-        victimList = {}
+        targets = {} -- Xóa danh sách khi tắt hack
     end
 end)
 
--- [[ GIAO DIỆN RED-LINE ]]
+-- [[ 2. MENU ĐIỀU KHIỂN ]]
 local sg = Instance.new("ScreenGui", game:GetService("CoreGui"))
 local f = Instance.new("Frame", sg)
-f.Size = UDim2.new(0, 240, 0, 110); f.Position = UDim2.new(0.8, 0, 0.2, 0); f.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+f.Size = UDim2.new(0, 220, 0, 110); f.Position = UDim2.new(0.8, 0, 0.2, 0); f.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
 Instance.new("UICorner", f)
-local line = Instance.new("Frame", f); line.Size = UDim2.new(1, 0, 0, 2); line.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+Instance.new("UIStroke", f).Color = Color3.fromRGB(255, 0, 0)
 
 local function AddBtn(name, y, callback)
     local b = Instance.new("TextButton", f)
-    b.Size = UDim2.new(0.9, 0, 0, 35); b.Position = UDim2.new(0.05, 0, 0, y); b.Text = name; b.BackgroundColor3 = Color3.fromRGB(15, 15, 15); b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.GothamBold; b.TextSize = 12
+    b.Size = UDim2.new(0.9, 0, 0, 35); b.Position = UDim2.new(0.05, 0, 0, y); b.Text = name; b.BackgroundColor3 = Color3.fromRGB(30, 30, 30); b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.GothamBold
     local on = false
     b.MouseButton1Click:Connect(function()
         on = not on
-        b.BackgroundColor3 = on and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(15, 15, 15)
+        b.BackgroundColor3 = on and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(30, 30, 30)
         callback(on)
     end)
     Instance.new("UICorner", b)
 end
 
-AddBtn("GENESIS KILL (NO HOLD - NO CLICK)", 15, function(s) config.kill = s end)
-AddBtn("GÔM MỤC TIÊU (AFK)", 60, function(s) config.ghostMagnet = s end)
+AddBtn("ETERNAL KILL (VĨNH VIỄN)", 15, function(s) config.kill = s end)
+AddBtn("INVISIBLE MAGNET 1", 60, function(s) config.ghostMagnet = s end)
