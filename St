@@ -1,12 +1,12 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
 local StarterGui = game:GetService("StarterGui")
+local LocalPlayer = Players.LocalPlayer
 
-local isFlingActive = false
-local flingPart = nil
+local isFlinging = false
+local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 
--- Hàm thông báo
+-- 1. Hàm thông báo (Revert System)
 local function notify(title, text)
     StarterGui:SetCore("SendNotification", {
         Title = title,
@@ -15,70 +15,86 @@ local function notify(title, text)
     })
 end
 
--- TẠO MENU
+-- 2. Giao diện (ResetOnSpawn = false để tránh mất nút)
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "AuraFlingGui"
+screenGui.Name = "StableFling"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
 local btn = Instance.new("TextButton")
 btn.Size = UDim2.new(0, 180, 0, 50)
 btn.Position = UDim2.new(0.05, 0, 0.4, 0)
-btn.Text = "AURA FLING: TẮT"
-btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+btn.Text = "FLING: TẮT"
+btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 btn.TextColor3 = Color3.fromRGB(255, 255, 255)
 btn.Font = Enum.Font.SourceSansBold
 btn.TextSize = 18
 btn.Parent = screenGui
-Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", btn)
 
--- LOGIC XỬ LÝ
-local function toggleAura()
-    local char = LocalPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
+-- 3. Logic Fling Siêu Cấp
+local function startFling()
+    while isFlinging do
+        for _, target in pairs(Players:GetPlayers()) do
+            if not isFlinging then break end
+            
+            if target ~= LocalPlayer and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+                local myRoot = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                local targetRoot = target.Character.HumanoidRootPart
+                
+                if myRoot and targetRoot then
+                    -- Bật chế độ xuyên vật thể để không bị kẹt vào map
+                    for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                        if part:IsA("BasePart") then part.CanCollide = false end
+                    end
 
-    if isFlingActive then
-        -- Tạo một Part riêng biệt làm Hitbox để không làm hỏng nhân vật chính
-        flingPart = Instance.new("Part")
-        flingPart.Name = "FlingAura"
-        flingPart.Size = Vector3.new(100, 100, 100) -- Phạm vi ảnh hưởng (100 studs)
-        flingPart.Transparency = 0.8 -- Bạn có thể chỉnh lên 1 để tàng hình hoàn toàn
-        flingPart.CanCollide = false -- Để bạn vẫn di chuyển xuyên tường được
-        flingPart.CanQuery = false
-        flingPart.Massless = true
-        flingPart.Color = Color3.fromRGB(255, 0, 0)
-        flingPart.Parent = char
-
-        -- Lực xoay cực đại gắn vào Part này
-        local bav = Instance.new("BodyAngularVelocity")
-        bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        bav.AngularVelocity = Vector3.new(0, 99999, 0)
-        bav.Parent = flingPart
-
-        -- Giữ Part luôn ở vị trí của bạn
-        RunService.Stepped:Connect(function()
-            if isFlingActive and flingPart and root then
-                flingPart.CFrame = root.CFrame
-                -- Thủ thuật: Ép va chạm với người khác nhưng không ép với map
-                flingPart.Velocity = Vector3.new(10000, 10000, 10000)
+                    -- Ép vận tốc cực đại (Cơ chế mới)
+                    local startTime = tick()
+                    while tick() - startTime < 0.5 and isFlinging do
+                        RunService.Stepped:Wait()
+                        
+                        -- Dịch chuyển xoay quanh mục tiêu để tạo va chạm liên tục
+                        myRoot.CFrame = targetRoot.CFrame * CFrame.Angles(0, math.rad(tick()*5000), 0)
+                        myRoot.AssemblyLinearVelocity = Vector3.new(99999, 99999, 99999)
+                        myRoot.AssemblyAngularVelocity = Vector3.new(99999, 99999, 99999)
+                    end
+                    
+                    -- Reset vận tốc sau mỗi mục tiêu
+                    myRoot.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                    myRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                end
             end
-        end)
-        
-        notify("Kích hoạt", "Aura Fling đang hoạt động (Bán kính 100)")
-    else
-        -- REVERT: Xóa bỏ mọi thứ khi tắt
-        if flingPart then
-            flingPart:Destroy()
-            flingPart = nil
         end
-        notify("Tắt", "Đã xóa Aura, nhân vật trở lại bình thường.")
+        task.wait(0.1)
+    end
+end
+
+-- 4. Revert trạng thái khi tắt
+local function resetCharacter()
+    local myChar = LocalPlayer.Character
+    if myChar then
+        for _, part in pairs(myChar:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = true end
+        end
+        local root = myChar:FindFirstChild("HumanoidRootPart")
+        if root then
+            root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+        end
     end
 end
 
 btn.MouseButton1Click:Connect(function()
-    isFlingActive = not isFlingActive
-    btn.Text = isFlingActive and "AURA FLING: BẬT" or "AURA FLING: TẮT"
-    btn.BackgroundColor3 = isFlingActive and Color3.fromRGB(200, 50, 50) or Color3.fromRGB(40, 40, 40)
-    toggleAura()
+    isFlinging = not isFlinging
+    if isFlinging then
+        btn.Text = "FLING: ĐANG CHẠY"
+        btn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        notify("Hệ thống", "Kích hoạt Fling thành công!")
+        startFling()
+    else
+        btn.Text = "FLING: TẮT"
+        btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+        resetCharacter()
+        notify("Hệ thống", "Đã tắt và khôi phục nhân vật.")
+    end
 end)
