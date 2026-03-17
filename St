@@ -1,90 +1,93 @@
--- [[ VŨ KHOA V60 - ETERNAL DAMAGE ]]
--- [[ CƠ CHẾ: CHẠM 1 LẦN - RÚT MÁU VĨNH VIỄN + GÔM ẨN ]]
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local StarterGui = game:GetService("StarterGui")
+local LocalPlayer = Players.LocalPlayer
 
-local lp = game:GetService("Players").LocalPlayer
-local runService = game:GetService("RunService")
+-- Biến kiểm soát trạng thái
+local isFlinging = false
+local currentTarget = nil
 
-local config = {
-    kill = false,
-    ghostMagnet = false,
-    hSize = 2500,
-    speed = 150 -- Tốc độ vắt máu
-}
-
-local targets = {} -- Danh sách đối thủ đã bị "dính" sát thương
-
--- [[ 1. HỆ THỐNG GÂY SÁT THƯƠNG VĨNH VIỄN ]]
-runService.Stepped:Connect(function()
-    if config.kill then
-        pcall(function()
-            local char = lp.Character
-            if not char then return end
-            
-            local tool = char:FindFirstChildOfClass("Tool") or lp.Backpack:FindFirstChildOfClass("Tool")
-            local blade = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildOfClass("Part"))
-            
-            if not blade then return end
-
-            for _, p in pairs(game.Players:GetPlayers()) do
-                if p ~= lp and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                    local tHRP = p.Character.HumanoidRootPart
-                    local tHum = p.Character:FindFirstChildOfClass("Humanoid")
-
-                    if tHum and tHum.Health > 0 then
-                        -- GÔM ẨN (INVISIBLE MAGNET)
-                        if config.ghostMagnet then
-                            tHRP.CFrame = char.HumanoidRootPart.CFrame * CFrame.new(0, 0, -4)
-                            tHRP.Velocity = Vector3.zero
-                        end
-
-                        -- HITBOX ĐỎ
-                        tHRP.Size = Vector3.new(config.hSize, config.hSize, config.hSize)
-                        tHRP.Color = Color3.fromRGB(255, 0, 0)
-                        tHRP.Transparency = 0.8
-                        tHRP.CanCollide = false
-
-                        -- KÍCH HOẠT VÒNG LẶP SÁT THƯƠNG VĨ NHIÊN (CHỈ CẦN CHẠM 1 LẦN)
-                        if not targets[p.Name] then
-                            targets[p.Name] = true
-                            task.spawn(function()
-                                while targets[p.Name] and tHum and tHum.Health > 0 and config.kill do
-                                    -- Gửi sát thương liên tục mà không cần bro phải chém lại
-                                    for i = 1, config.speed do
-                                        firetouchinterest(tHRP, blade, 0)
-                                        firetouchinterest(tHRP, blade, 1)
-                                    end
-                                    task.wait(0.1) -- Giãn cách nhẹ để tránh crash
-                                end
-                                targets[p.Name] = nil -- Reset khi đối thủ chết
-                            end)
-                        end
-                    end
-                end
-            end
-        end)
-    else
-        targets = {} -- Xóa danh sách khi tắt hack
-    end
-end)
-
--- [[ 2. MENU ĐIỀU KHIỂN ]]
-local sg = Instance.new("ScreenGui", game:GetService("CoreGui"))
-local f = Instance.new("Frame", sg)
-f.Size = UDim2.new(0, 220, 0, 110); f.Position = UDim2.new(0.8, 0, 0.2, 0); f.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
-Instance.new("UICorner", f)
-Instance.new("UIStroke", f).Color = Color3.fromRGB(255, 0, 0)
-
-local function AddBtn(name, y, callback)
-    local b = Instance.new("TextButton", f)
-    b.Size = UDim2.new(0.9, 0, 0, 35); b.Position = UDim2.new(0.05, 0, 0, y); b.Text = name; b.BackgroundColor3 = Color3.fromRGB(30, 30, 30); b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.GothamBold
-    local on = false
-    b.MouseButton1Click:Connect(function()
-        on = not on
-        b.BackgroundColor3 = on and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(30, 30, 30)
-        callback(on)
-    end)
-    Instance.new("UICorner", b)
+-- Hàm thông báo (Revert/Notify System)
+local function notify(title, text)
+    StarterGui:SetCore("SendNotification", {
+        Title = title,
+        Text = text,
+        Duration = 2
+    })
 end
 
-AddBtn("ETERNAL KILL (VĨNH VIỄN)", 15, function(s) config.kill = s end)
-AddBtn("INVISIBLE MAGNET 1", 60, function(s) config.ghostMagnet = s end)
+-- TẠO GIAO DIỆN MENU (GUI)
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FlingMenuGui"
+screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local mainButton = Instance.new("TextButton")
+mainButton.Size = UDim2.new(0, 150, 0, 50)
+mainButton.Position = UDim2.new(0.05, 0, 0.4, 0) -- Vị trí bên trái màn hình
+mainButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+mainButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+mainButton.Text = "BẬT FLING"
+mainButton.Font = Enum.Font.SourceSansBold
+mainButton.TextSize = 20
+mainButton.Parent = screenGui
+
+-- Bo góc cho nút
+local uiCorner = Instance.new("UICorner")
+uiCorner.CornerRadius = UDim.new(0, 8)
+uiCorner.Parent = mainButton
+
+-- HÀM XỬ LÝ FLING
+local function startFlingLoop()
+    while isFlinging do
+        local playerList = Players:GetPlayers()
+        
+        for _, target in pairs(playerList) do
+            if not isFlinging then break end -- Dừng ngay nếu nhấn Tắt
+            
+            if target ~= LocalPlayer and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+                local myChar = LocalPlayer.Character
+                local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                local targetRoot = target.Character:FindFirstChild("HumanoidRootPart")
+                
+                if myRoot and targetRoot then
+                    notify("Flinging", "Đang áp sát: " .. target.Name)
+                    
+                    -- Tạo lực xoay cực mạnh
+                    local bav = Instance.new("BodyAngularVelocity")
+                    bav.P = 1000000
+                    bav.MaxTorque = Vector3.new(1, 1, 1) * 999999
+                    bav.AngularVelocity = Vector3.new(0, 9999, 0)
+                    bav.Parent = myRoot
+                    
+                    -- Áp sát liên tục trong 1.5 giây
+                    local start = tick()
+                    while tick() - start < 1.5 and isFlinging do
+                        RunService.Heartbeat:Wait()
+                        myRoot.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 1)
+                        myRoot.Velocity = Vector3.new(999, 999, 999)
+                    end
+                    
+                    bav:Destroy() -- Reset lực xoay
+                    task.wait(0.2)
+                end
+            end
+        end
+        task.wait(1) -- Nghỉ 1 giây trước khi lặp lại toàn server
+    end
+end
+
+-- SỰ KIỆN CLICK NÚT
+mainButton.MouseButton1Click:Connect(function()
+    isFlinging = not isFlinging
+    
+    if isFlinging then
+        mainButton.Text = "ĐANG CHẠY..."
+        mainButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50) -- Đổi sang màu đỏ
+        notify("Hệ thống", "Đã kích hoạt Fling toàn server!")
+        startFlingLoop()
+    else
+        mainButton.Text = "BẬT FLING"
+        mainButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40) -- Về màu gốc
+        notify("Hệ thống", "Đã tắt và revert trạng thái gốc.")
+    end
+end)
