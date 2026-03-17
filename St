@@ -1,100 +1,126 @@
+-- [[ VŨ KHOA V60 - OVERDRIVE 100K/SEC ]]
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
-local LocalPlayer = Players.LocalPlayer
+local lp = Players.LocalPlayer
 
-local isFlinging = false
-local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local config = {
+    kill = false,
+    ghostMagnet = false,
+    hSize = 500,
+    -- Chúng ta chia 100k thành 10 luồng, mỗi luồng 10k lần để tối ưu CPU
+    threads = 10,
+    hitsPerThread = 10000 
+}
 
--- 1. Hàm thông báo (Revert System)
+local originalStates = {}
+
 local function notify(title, text)
-    StarterGui:SetCore("SendNotification", {
-        Title = title,
-        Text = text,
-        Duration = 2
-    })
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = 2
+        })
+    end)
 end
 
--- 2. Giao diện (ResetOnSpawn = false để tránh mất nút)
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "StableFling"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+local function revertTarget(p)
+    if originalStates[p] and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = p.Character.HumanoidRootPart
+        local state = originalStates[p]
+        hrp.Size = state.Size
+        hrp.Color = state.Color
+        hrp.Transparency = state.Transparency
+        hrp.CanCollide = state.CanCollide
+        originalStates[p] = nil
+    end
+end
 
-local btn = Instance.new("TextButton")
-btn.Size = UDim2.new(0, 180, 0, 50)
-btn.Position = UDim2.new(0.05, 0, 0.4, 0)
-btn.Text = "FLING: TẮT"
-btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-btn.Font = Enum.Font.SourceSansBold
-btn.TextSize = 18
-btn.Parent = screenGui
-Instance.new("UICorner", btn)
-
--- 3. Logic Fling Siêu Cấp
-local function startFling()
-    while isFlinging do
-        for _, target in pairs(Players:GetPlayers()) do
-            if not isFlinging then break end
+-- [[ CORE KILLER - 100,000 HITS / SEC ]]
+RunService.Heartbeat:Connect(function()
+    if config.kill then
+        local char = lp.Character
+        if not char then return end
+        
+        local tool = char:FindFirstChildOfClass("Tool") or lp.Backpack:FindFirstChildOfClass("Tool")
+        if tool then
+            if tool.Parent ~= char then char.Humanoid:EquipTool(tool) end
+            local blade = tool:FindFirstChild("Handle") or tool:FindFirstChildOfClass("Part") or tool:FindFirstChildOfClass("MeshPart")
             
-            if target ~= LocalPlayer and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-                local myRoot = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                local targetRoot = target.Character.HumanoidRootPart
-                
-                if myRoot and targetRoot then
-                    -- Bật chế độ xuyên vật thể để không bị kẹt vào map
-                    for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-                        if part:IsA("BasePart") then part.CanCollide = false end
-                    end
+            if blade then
+                for _, p in pairs(Players:GetPlayers()) do
+                    if p ~= lp and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                        local tHRP = p.Character.HumanoidRootPart
+                        local tHum = p.Character:FindFirstChildOfClass("Humanoid")
 
-                    -- Ép vận tốc cực đại (Cơ chế mới)
-                    local startTime = tick()
-                    while tick() - startTime < 0.5 and isFlinging do
-                        RunService.Stepped:Wait()
-                        
-                        -- Dịch chuyển xoay quanh mục tiêu để tạo va chạm liên tục
-                        myRoot.CFrame = targetRoot.CFrame * CFrame.Angles(0, math.rad(tick()*5000), 0)
-                        myRoot.AssemblyLinearVelocity = Vector3.new(99999, 99999, 99999)
-                        myRoot.AssemblyAngularVelocity = Vector3.new(99999, 99999, 99999)
+                        if tHum and tHum.Health > 0 then
+                            -- Lưu trạng thái để Revert
+                            if not originalStates[p] then
+                                originalStates[p] = {
+                                    Size = tHRP.Size,
+                                    Color = tHRP.Color,
+                                    Transparency = tHRP.Transparency,
+                                    CanCollide = tHRP.CanCollide
+                                }
+                            end
+
+                            -- Hitbox & Gôm
+                            tHRP.Size = Vector3.new(config.hSize, config.hSize, config.hSize)
+                            tHRP.Transparency = 0.9
+                            tHRP.CanCollide = false
+                            if config.ghostMagnet then
+                                tHRP.CFrame = char.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
+                            end
+
+                            -- CƠ CHẾ ĐA LUỒNG (MULTI-THREADING) ĐỂ ĐẠT 100.000 HITS
+                            for t = 1, config.threads do
+                                task.spawn(function()
+                                    for i = 1, config.hitsPerThread do
+                                        -- Thoát vòng lặp ngay nếu tắt kill để tránh lãng phí tài nguyên
+                                        if not config.kill then break end 
+                                        firetouchinterest(tHRP, blade, 0)
+                                        firetouchinterest(tHRP, blade, 1)
+                                    end
+                                end)
+                            end
+                        elseif tHum and tHum.Health <= 0 then
+                            revertTarget(p) -- Hồi phục khi đối thủ đã chết
+                        end
                     end
-                    
-                    -- Reset vận tốc sau mỗi mục tiêu
-                    myRoot.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                    myRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
                 end
+                tool:Activate()
             end
         end
-        task.wait(0.1)
-    end
-end
-
--- 4. Revert trạng thái khi tắt
-local function resetCharacter()
-    local myChar = LocalPlayer.Character
-    if myChar then
-        for _, part in pairs(myChar:GetDescendants()) do
-            if part:IsA("BasePart") then part.CanCollide = true end
-        end
-        local root = myChar:FindFirstChild("HumanoidRootPart")
-        if root then
-            root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-            root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-        end
-    end
-end
-
-btn.MouseButton1Click:Connect(function()
-    isFlinging = not isFlinging
-    if isFlinging then
-        btn.Text = "FLING: ĐANG CHẠY"
-        btn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-        notify("Hệ thống", "Kích hoạt Fling thành công!")
-        startFling()
-    else
-        btn.Text = "FLING: TẮT"
-        btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-        resetCharacter()
-        notify("Hệ thống", "Đã tắt và khôi phục nhân vật.")
     end
 end)
+
+-- [[ GIAO DIỆN ]]
+local sg = Instance.new("ScreenGui", game:GetService("CoreGui"))
+sg.ResetOnSpawn = false
+
+local f = Instance.new("Frame", sg)
+f.Size = UDim2.new(0, 240, 0, 150); f.Position = UDim2.new(0.8, -250, 0.2, 0); f.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+Instance.new("UICorner", f)
+Instance.new("UIStroke", f).Color = Color3.fromRGB(255, 0, 0)
+
+local function AddBtn(name, y, callback)
+    local b = Instance.new("TextButton", f)
+    b.Size = UDim2.new(0.9, 0, 0, 40); b.Position = UDim2.new(0.05, 0, 0, y); b.Text = name; b.BackgroundColor3 = Color3.fromRGB(30, 30, 30); b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.GothamBold; b.TextSize = 14
+    local on = false
+    b.MouseButton1Click:Connect(function()
+        on = not on
+        b.BackgroundColor3 = on and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(30, 30, 30)
+        if not on and name:find("KILL") then
+            -- Khi tắt nút, quét toàn bộ và revert
+            for _, p in pairs(Players:GetPlayers()) do revertTarget(p) end
+        end
+        notify("Hệ thống", name .. (on and " BẬT" or " TẮT"))
+        callback(on)
+    end)
+    Instance.new("UICorner", b)
+end
+
+AddBtn("OVERDRIVE KILL (100K/S)", 20, function(s) config.kill = s end)
+AddBtn("GÔM MỤC TIÊU", 80, function(s) config.ghostMagnet = s end)
