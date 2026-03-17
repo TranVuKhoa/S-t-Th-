@@ -1,4 +1,4 @@
--- [[ VŨ KHOA V60 - OVERDRIVE 100K/SEC ]]
+-- [[ VŨ KHOA V60 - ZERO LAG OVERDRIVE ]]
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -8,119 +8,109 @@ local lp = Players.LocalPlayer
 local config = {
     kill = false,
     ghostMagnet = false,
-    hSize = 500,
-    -- Chúng ta chia 100k thành 10 luồng, mỗi luồng 10k lần để tối ưu CPU
-    threads = 10,
-    hitsPerThread = 10000 
+    hSize = 150, -- Kích thước vừa đủ để không làm lỗi engine vật lý
+    batchSize = 2500 -- Số lần chém mỗi mục tiêu trong 1 khung hình (Cực nhanh)
 }
 
 local originalStates = {}
 
+-- Hệ thống thông báo gọn nhẹ
 local function notify(title, text)
-    pcall(function()
-        StarterGui:SetCore("SendNotification", {
-            Title = title,
-            Text = text,
-            Duration = 2
-        })
-    end)
+    StarterGui:SetCore("SendNotification", {
+        Title = title,
+        Text = text,
+        Duration = 1.5
+    })
 end
 
+-- Hàm Revert tối ưu (Chỉ chạy khi cần)
 local function revertTarget(p)
-    if originalStates[p] and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-        local hrp = p.Character.HumanoidRootPart
-        local state = originalStates[p]
-        hrp.Size = state.Size
-        hrp.Color = state.Color
-        hrp.Transparency = state.Transparency
-        hrp.CanCollide = state.CanCollide
+    if originalStates[p] then
+        local hrp = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            hrp.Size = originalStates[p].Size
+            hrp.CanCollide = originalStates[p].CanCollide
+            hrp.Transparency = originalStates[p].Transparency
+        end
         originalStates[p] = nil
     end
 end
 
--- [[ CORE KILLER - 100,000 HITS / SEC ]]
-RunService.Heartbeat:Connect(function()
-    if config.kill then
-        local char = lp.Character
-        if not char then return end
-        
-        local tool = char:FindFirstChildOfClass("Tool") or lp.Backpack:FindFirstChildOfClass("Tool")
-        if tool then
-            if tool.Parent ~= char then char.Humanoid:EquipTool(tool) end
-            local blade = tool:FindFirstChild("Handle") or tool:FindFirstChildOfClass("Part") or tool:FindFirstChildOfClass("MeshPart")
-            
-            if blade then
-                for _, p in pairs(Players:GetPlayers()) do
-                    if p ~= lp and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                        local tHRP = p.Character.HumanoidRootPart
-                        local tHum = p.Character:FindFirstChildOfClass("Humanoid")
+-- [[ CORE LOGIC - TỐI ƯU HÓA HIỆU NĂNG ]]
+RunService.Stepped:Connect(function()
+    if not config.kill then return end
+    
+    local char = lp.Character
+    local tool = char and char:FindFirstChildOfClass("Tool") or lp.Backpack:FindFirstChildOfClass("Tool")
+    if not tool then return end
+    
+    -- Tự động cầm kiếm
+    if tool.Parent ~= char then char.Humanoid:EquipTool(tool) end
+    local blade = tool:FindFirstChild("Handle") or tool:FindFirstChildOfClass("Part") or tool:FindFirstChildOfClass("MeshPart")
+    if not blade then return end
 
-                        if tHum and tHum.Health > 0 then
-                            -- Lưu trạng thái để Revert
-                            if not originalStates[p] then
-                                originalStates[p] = {
-                                    Size = tHRP.Size,
-                                    Color = tHRP.Color,
-                                    Transparency = tHRP.Transparency,
-                                    CanCollide = tHRP.CanCollide
-                                }
-                            end
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= lp and p.Character then
+            local tHRP = p.Character:FindFirstChild("HumanoidRootPart")
+            local tHum = p.Character:FindFirstChildOfClass("Humanoid")
 
-                            -- Hitbox & Gôm
-                            tHRP.Size = Vector3.new(config.hSize, config.hSize, config.hSize)
-                            tHRP.Transparency = 0.9
-                            tHRP.CanCollide = false
-                            if config.ghostMagnet then
-                                tHRP.CFrame = char.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
-                            end
-
-                            -- CƠ CHẾ ĐA LUỒNG (MULTI-THREADING) ĐỂ ĐẠT 100.000 HITS
-                            for t = 1, config.threads do
-                                task.spawn(function()
-                                    for i = 1, config.hitsPerThread do
-                                        -- Thoát vòng lặp ngay nếu tắt kill để tránh lãng phí tài nguyên
-                                        if not config.kill then break end 
-                                        firetouchinterest(tHRP, blade, 0)
-                                        firetouchinterest(tHRP, blade, 1)
-                                    end
-                                end)
-                            end
-                        elseif tHum and tHum.Health <= 0 then
-                            revertTarget(p) -- Hồi phục khi đối thủ đã chết
-                        end
-                    end
+            if tHum and tHum.Health > 0 and tHRP then
+                -- Lưu trạng thái (Chỉ lưu 1 lần duy nhất)
+                if not originalStates[p] then
+                    originalStates[p] = {
+                        Size = tHRP.Size,
+                        CanCollide = tHRP.CanCollide,
+                        Transparency = tHRP.Transparency
+                    }
                 end
-                tool:Activate()
+
+                -- Hitbox tối giản (Không đổi màu, không hiệu ứng để giảm lag)
+                tHRP.Size = Vector3.new(config.hSize, config.hSize, config.hSize)
+                tHRP.CanCollide = false
+                tHRP.Transparency = 1 -- Tàng hình luôn để card đồ họa không phải vẽ
+
+                if config.ghostMagnet then
+                    tHRP.CFrame = char.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
+                end
+
+                -- DỒN SÁT THƯƠNG SIÊU TỐC (Dùng vòng lặp trực tiếp, không spawn luồng mới)
+                for i = 1, config.batchSize do
+                    firetouchinterest(tHRP, blade, 0)
+                    firetouchinterest(tHRP, blade, 1)
+                end
+            elseif tHum and tHum.Health <= 0 then
+                revertTarget(p)
             end
         end
     end
+    tool:Activate()
 end)
 
--- [[ GIAO DIỆN ]]
+-- [[ UI MINIMALIST ]]
 local sg = Instance.new("ScreenGui", game:GetService("CoreGui"))
 sg.ResetOnSpawn = false
 
 local f = Instance.new("Frame", sg)
-f.Size = UDim2.new(0, 240, 0, 150); f.Position = UDim2.new(0.8, -250, 0.2, 0); f.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+f.Size = UDim2.new(0, 200, 0, 130); f.Position = UDim2.new(0.8, -210, 0.2, 0); f.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
 Instance.new("UICorner", f)
-Instance.new("UIStroke", f).Color = Color3.fromRGB(255, 0, 0)
+local s = Instance.new("UIStroke", f); s.Color = Color3.fromRGB(255, 0, 0); s.Thickness = 2
 
 local function AddBtn(name, y, callback)
     local b = Instance.new("TextButton", f)
-    b.Size = UDim2.new(0.9, 0, 0, 40); b.Position = UDim2.new(0.05, 0, 0, y); b.Text = name; b.BackgroundColor3 = Color3.fromRGB(30, 30, 30); b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.GothamBold; b.TextSize = 14
+    b.Size = UDim2.new(0.9, 0, 0, 40); b.Position = UDim2.new(0.05, 0, 0, y); b.Text = name; b.BackgroundColor3 = Color3.fromRGB(25, 25, 25); b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.SourceSansBold; b.TextSize = 16
     local on = false
     b.MouseButton1Click:Connect(function()
         on = not on
-        b.BackgroundColor3 = on and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(30, 30, 30)
-        if not on and name:find("KILL") then
-            -- Khi tắt nút, quét toàn bộ và revert
-            for _, p in pairs(Players:GetPlayers()) do revertTarget(p) end
-        end
+        b.BackgroundColor3 = on and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(25, 25, 25)
+        if not on then for _, p in pairs(Players:GetPlayers()) do revertTarget(p) end end
         notify("Hệ thống", name .. (on and " BẬT" or " TẮT"))
         callback(on)
     end)
     Instance.new("UICorner", b)
 end
+
+AddBtn("ULTRA KILL (NO LAG)", 15, function(s) config.kill = s end)
+AddBtn("GÔM MỤC TIÊU", 70, function(s) config.ghostMagnet = s end)
 
 AddBtn("OVERDRIVE KILL (100K/S)", 20, function(s) config.kill = s end)
 AddBtn("GÔM MỤC TIÊU", 80, function(s) config.ghostMagnet = s end)
