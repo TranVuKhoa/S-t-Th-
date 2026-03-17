@@ -1,0 +1,73 @@
+-- [[ VŨ KHOA V60 - ELITE UI FRAMEWORK ]]
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+
+-- Tạo ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "V60_Elite_UI"
+ScreenGui.Parent = CoreGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+-- Khung chính (Main Frame)
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15) -- Màu tối cực ngầu
+MainFrame.Position = UDim2.new(0.5, -100, 0.5, -75)
+MainFrame.Size = UDim2.new(0, 220, 0, 150)
+MainFrame.Active = true
+MainFrame.Draggable = true -- Cho phép kéo menu quanh màn hình
+
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(0, 10)
+Corner.Parent = MainFrame
+
+local Stroke = Instance.new("UIStroke")
+Stroke.Color = Color3.fromRGB(255, 0, 0) -- Viền đỏ
+Stroke.Thickness = 2
+Stroke.Parent = MainFrame
+
+-- Tiêu đề
+local Title = Instance.new("TextLabel")
+Title.Parent = MainFrame
+Title.Text = "V60 ELITE HUB"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 16
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundTransparency = 1
+
+-- Hàm tạo nút bấm nhanh
+local function CreateButton(text, pos, callback)
+    local Button = Instance.new("TextButton")
+    Button.Parent = MainFrame
+    Button.Text = text
+    Button.Size = UDim2.new(0.9, 0, 0, 35)
+    Button.Position = UDim2.new(0.05, 0, 0, pos)
+    Button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Button.Font = Enum.Font.GothamSemibold
+    Button.TextSize = 14
+    
+    local BCorner = Instance.new("UICorner")
+    BCorner.CornerRadius = UDim.new(0, 8)
+    BCorner.Parent = Button
+
+    local state = false
+    Button.MouseButton1Click:Connect(function()
+        state = not state
+        Button.BackgroundColor3 = state and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(30, 30, 30)
+        callback(state)
+    end)
+end
+
+-- Thêm các nút chức năng (Bro có thể tự thêm logic vào đây)
+CreateButton("TỰ ĐỘNG CÔNG KÍCH", 45, function(s)
+    print("Auto Attack: ", s)
+end)
+
+CreateButton("TỐI ƯU HÓA FPS", 90, function(s)
+    print("FPS Boost: ", s)
+end)
+
+print("V60 Elite UI Loaded!")
