@@ -1,5 +1,5 @@
--- [[ VŨ KHOA V60 - AUTO-GOD EDITION ]]
--- [[ CƠ CHẾ: HOÀN TOÀN TỰ ĐỘNG - KHÔNG CLICK - KHÔNG VUNG KIẾM ]]
+-- [[ VŨ KHOA V60 - GENESIS EDITION ]]
+-- [[ CƠ CHẾ: BACKPACK DAMAGE INJECTION - KHÔNG CẦM KIẾM - KHÔNG CLICK ]]
 
 local lp = game:GetService("Players").LocalPlayer
 local runService = game:GetService("RunService")
@@ -8,58 +8,56 @@ local task = task
 local config = {
     kill = false,
     ghostMagnet = false,
-    hSize = 5000, 
-    auto_speed = 3000 -- Tốc độ dồn đam tự động (Cực cao)
+    hSize = 15000, 
+    burst = 15000 -- Cường độ "vả" sát thương (siêu cao để chết 0s)
 }
 
-local activeTargets = {}
+local victimList = {}
 
--- [[ HỆ THỐNG TỰ ĐỘNG DIỆT ĐỊCH ]]
+-- [[ ENGINE DIỆT TẬN GỐC TỪ TÚI ĐỒ ]]
 runService.Heartbeat:Connect(function()
     if config.kill then
         pcall(function()
             local char = lp.Character
             if not char then return end
+
+            -- TÌM VŨ KHÍ TRONG BACKPACK HOẶC TRÊN TAY
+            local tool = lp.Backpack:FindFirstChildOfClass("Tool") or char:FindFirstChildOfClass("Tool")
+            if not tool then return end
             
-            -- 1. TỰ ĐỘNG TRANG BỊ VŨ KHÍ (AUTO-EQUIP)
-            local tool = char:FindFirstChildOfClass("Tool") or lp.Backpack:FindFirstChildOfClass("Tool")
-            if tool and tool.Parent ~= char then
-                char.Humanoid:EquipTool(tool)
-            end
-            
-            local blade = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildOfClass("Part") or tool:FindFirstChildOfClass("MeshPart"))
+            -- LẤY LƯỠI KIẾM/BỘ PHẬN GÂY ĐAM
+            local blade = tool:FindFirstChild("Handle") or tool:FindFirstChildOfClass("Part") or tool:FindFirstChildOfClass("MeshPart")
             if not blade then return end
 
-            -- 2. QUÉT VÀ DIỆT (KHÔNG CẦN CLICK)
             for _, p in pairs(game.Players:GetPlayers()) do
                 if p ~= lp and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                     local tHRP = p.Character.HumanoidRootPart
                     local tHum = p.Character:FindFirstChildOfClass("Humanoid")
 
                     if tHum and tHum.Health > 0 then
-                        -- GÔM ẨN (MAGNET)
+                        -- GÔM ẨN CỰC MẠNH
                         if config.ghostMagnet then
-                            tHRP.CFrame = char.HumanoidRootPart.CFrame * CFrame.new(0, 0, -4)
+                            tHRP.CFrame = char.HumanoidRootPart.CFrame * CFrame.new(0, 0, -5)
                             tHRP.Velocity = Vector3.zero
                         end
 
-                        -- HITBOX TÀNG HÌNH
+                        -- HITBOX TÀNG HÌNH (MAX TẦM)
                         tHRP.Size = Vector3.new(config.hSize, config.hSize, config.hSize)
                         tHRP.CanCollide = false
 
-                        -- LUỒNG BƠM SÁT THƯƠNG TỰ ĐỘNG (TRUE AUTO)
-                        if not activeTargets[p.Name] then
-                            activeTargets[p.Name] = true
+                        -- LUỒNG SÁT THƯƠNG "MA" (GÂY ĐAM TỪ XA)
+                        if not victimList[p.Name] then
+                            victimList[p.Name] = true
                             task.spawn(function()
-                                while activeTargets[p.Name] and tHum and tHum.Health > 0 and config.kill do
-                                    -- Bơm thẳng sát thương vào đối thủ mà không cần lệnh Activate/Click
-                                    for i = 1, config.auto_speed do
+                                while victimList[p.Name] and tHum and tHum.Health > 0 and config.kill do
+                                    -- Bơm 4000 nhát chém/tick trực tiếp từ túi đồ
+                                    for i = 1, config.burst do
                                         firetouchinterest(tHRP, blade, 0)
                                         firetouchinterest(tHRP, blade, 1)
                                     end
-                                    task.wait() -- Chạy liên tục theo nhịp máy
+                                    task.wait() 
                                 end
-                                activeTargets[p.Name] = nil
+                                victimList[p.Name] = nil
                             end)
                         end
                     end
@@ -67,28 +65,28 @@ runService.Heartbeat:Connect(function()
             end
         end)
     else
-        activeTargets = {}
+        victimList = {}
     end
 end)
 
--- [[ GIAO DIỆN ĐIỀU KHIỂN ]]
+-- [[ GIAO DIỆN RED-LINE ]]
 local sg = Instance.new("ScreenGui", game:GetService("CoreGui"))
 local f = Instance.new("Frame", sg)
-f.Size = UDim2.new(0, 240, 0, 110); f.Position = UDim2.new(0.8, 0, 0.2, 0); f.BackgroundColor3 = Color3.fromRGB(15, 0, 15)
+f.Size = UDim2.new(0, 240, 0, 110); f.Position = UDim2.new(0.8, 0, 0.2, 0); f.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 Instance.new("UICorner", f)
-Instance.new("UIStroke", f).Color = Color3.fromRGB(255, 0, 255)
+local line = Instance.new("Frame", f); line.Size = UDim2.new(1, 0, 0, 2); line.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 
 local function AddBtn(name, y, callback)
     local b = Instance.new("TextButton", f)
-    b.Size = UDim2.new(0.9, 0, 0, 35); b.Position = UDim2.new(0.05, 0, 0, y); b.Text = name; b.BackgroundColor3 = Color3.fromRGB(30, 0, 30); b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.GothamBold
+    b.Size = UDim2.new(0.9, 0, 0, 35); b.Position = UDim2.new(0.05, 0, 0, y); b.Text = name; b.BackgroundColor3 = Color3.fromRGB(15, 15, 15); b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.GothamBold; b.TextSize = 12
     local on = false
     b.MouseButton1Click:Connect(function()
         on = not on
-        b.BackgroundColor3 = on and Color3.fromRGB(200, 0, 200) or Color3.fromRGB(30, 0, 30)
+        b.BackgroundColor3 = on and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(15, 15, 15)
         callback(on)
     end)
     Instance.new("UICorner", b)
 end
 
-AddBtn("AUTO KILL ALL (KHÔNG CLICK)", 15, function(s) config.kill = s end)
-AddBtn("GÔM ẨN INVISIBLE", 60, function(s) config.ghostMagnet = s end)
+AddBtn("GENESIS KILL (NO HOLD - NO CLICK)", 15, function(s) config.kill = s end)
+AddBtn("GÔM MỤC TIÊU (AFK)", 60, function(s) config.ghostMagnet = s end)
