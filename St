@@ -1,73 +1,105 @@
--- [[ VŨ KHOA V60 - ELITE UI FRAMEWORK ]]
-local TweenService = game:GetService("TweenService")
-local CoreGui = game:GetService("CoreGui")
+-- [[ VŨ KHOA V60 - ZERO DEATH EDITION ]]
+-- [[ CƠ CHẾ: INSTANT PACKET BURST + BYPASS SERVER COOLDOWN + MAX LAG ]]
 
--- Tạo ScreenGui
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "V60_Elite_UI"
-ScreenGui.Parent = CoreGui
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+local lp = game:GetService("Players").LocalPlayer
+local runService = game:GetService("RunService")
+local task = task
 
--- Khung chính (Main Frame)
-local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Parent = ScreenGui
-MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15) -- Màu tối cực ngầu
-MainFrame.Position = UDim2.new(0.5, -100, 0.5, -75)
-MainFrame.Size = UDim2.new(0, 220, 0, 150)
-MainFrame.Active = true
-MainFrame.Draggable = true -- Cho phép kéo menu quanh màn hình
+local config = {
+    kill = false,
+    ghostMagnet = false,
+    hSize = 5000, 
+    speed = 5000,    -- Đẩy lên 5000 để đạt mức Kill 0s
+    lagPower = 1500  -- Ép xung làm treo máy đối thủ
+}
 
-local Corner = Instance.new("UICorner")
-Corner.CornerRadius = UDim.new(0, 10)
-Corner.Parent = MainFrame
+local activeVictims = {}
 
-local Stroke = Instance.new("UIStroke")
-Stroke.Color = Color3.fromRGB(255, 0, 0) -- Viền đỏ
-Stroke.Thickness = 2
-Stroke.Parent = MainFrame
+-- [[ ENGINE HỦY DIỆT TỨC THÌ ]]
+runService.RenderStepped:Connect(function()
+    if config.kill then
+        pcall(function()
+            local char = lp.Character
+            if not char then return end
+            
+            -- AUTO EQUIP TRƯỚC KHI SERVER QUÉT
+            local tool = char:FindFirstChildOfClass("Tool") or lp.Backpack:FindFirstChildOfClass("Tool")
+            if tool and tool.Parent ~= char then
+                char.Humanoid:EquipTool(tool)
+            end
+            
+            local blade = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildOfClass("Part") or tool:FindFirstChildOfClass("MeshPart"))
+            if not blade then return end
 
--- Tiêu đề
-local Title = Instance.new("TextLabel")
-Title.Parent = MainFrame
-Title.Text = "V60 ELITE HUB"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 16
-Title.Size = UDim2.new(1, 0, 0, 30)
-Title.BackgroundTransparency = 1
+            -- BYPASS ANIMATION: CHÉM TRƯỚC KHI CÓ ĐỘNG TÁC
+            task.spawn(function()
+                tool:Activate()
+            end)
 
--- Hàm tạo nút bấm nhanh
-local function CreateButton(text, pos, callback)
-    local Button = Instance.new("TextButton")
-    Button.Parent = MainFrame
-    Button.Text = text
-    Button.Size = UDim2.new(0.9, 0, 0, 35)
-    Button.Position = UDim2.new(0.05, 0, 0, pos)
-    Button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    Button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Button.Font = Enum.Font.GothamSemibold
-    Button.TextSize = 14
-    
-    local BCorner = Instance.new("UICorner")
-    BCorner.CornerRadius = UDim.new(0, 8)
-    BCorner.Parent = Button
+            for _, p in pairs(game.Players:GetPlayers()) do
+                if p ~= lp and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                    local tHRP = p.Character.HumanoidRootPart
+                    local tHum = p.Character:FindFirstChildOfClass("Humanoid")
 
-    local state = false
-    Button.MouseButton1Click:Connect(function()
-        state = not state
-        Button.BackgroundColor3 = state and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(30, 30, 30)
-        callback(state)
+                    if tHum and tHum.Health > 0 then
+                        -- INVISIBLE MAGNET 1
+                        if config.ghostMagnet then
+                            tHRP.CFrame = char.HumanoidRootPart.CFrame * CFrame.new(0, 0, -4)
+                            tHRP.Velocity = Vector3.zero
+                        end
+
+                        -- HITBOX OMEGA
+                        tHRP.Size = Vector3.new(config.hSize, config.hSize, config.hSize)
+                        tHRP.Transparency = 0.9
+                        tHRP.CanCollide = false
+
+                        -- LUỒNG KILL 0s (PACKET BURST)
+                        if not activeVictims[p.Name] then
+                            activeVictims[p.Name] = true
+                            task.spawn(function()
+                                while activeVictims[p.Name] and tHum and tHum.Health > 0 and config.kill do
+                                    -- Xả 5000 nhát chém trong 1 lần quét (Instant Death)
+                                    for i = 1, config.speed do
+                                        firetouchinterest(tHRP, blade, 0)
+                                        firetouchinterest(tHRP, blade, 1)
+                                    end
+                                    
+                                    -- Gây lag đóng băng màn hình cực đại
+                                    for i = 1, config.lagPower do
+                                        firetouchinterest(tHRP, blade, 0)
+                                    end
+                                    task.wait() -- Chạy liên tục không nghỉ
+                                end
+                                activeVictims[p.Name] = nil
+                            end)
+                        end
+                    end
+                end
+            end
+        end)
+    else
+        activeVictims = {}
+    end
+end)
+
+-- [[ GIAO DIỆN DARK-UI ]]
+local sg = Instance.new("ScreenGui", game:GetService("CoreGui"))
+local f = Instance.new("Frame", sg)
+f.Size = UDim2.new(0, 240, 0, 110); f.Position = UDim2.new(0.8, 0, 0.2, 0); f.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+Instance.new("UICorner", f)
+local st = Instance.new("UIStroke", f); st.Color = Color3.fromRGB(255, 0, 0); st.Thickness = 2
+
+local function AddBtn(name, y, callback)
+    local b = Instance.new("TextButton", f)
+    b.Size = UDim2.new(0.9, 0, 0, 35); b.Position = UDim2.new(0.05, 0, 0, y); b.Text = name; b.BackgroundColor3 = Color3.fromRGB(20, 20, 20); b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.GothamBold
+    local on = false
+    b.MouseButton1Click:Connect(function()
+        on = not on
+        b.BackgroundColor3 = on and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(20, 20, 20)
+        callback(on)
     end)
+    Instance.new("UICorner", b)
 end
 
--- Thêm các nút chức năng (Bro có thể tự thêm logic vào đây)
-CreateButton("TỰ ĐỘNG CÔNG KÍCH", 45, function(s)
-    print("Auto Attack: ", s)
-end)
-
-CreateButton("TỐI ƯU HÓA FPS", 90, function(s)
-    print("FPS Boost: ", s)
-end)
-
-print("V60 Elite UI Loaded!")
+AddBtn("ZERO-KILL 0s (SPEED 5K)", 15, function(s) config.kill = s end)
+AddBtn("INVISIBLE MAGNET 1", 60, function(s) config.ghostMagnet = s end)
