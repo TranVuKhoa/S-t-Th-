@@ -1,10 +1,11 @@
+local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
-local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
 
--- Hệ thống thông báo
+-- 1. Hệ thống thông báo & Khôi phục (Revert)
+local originalProperties = { Materials = {}, Transparencies = {}, Effects = {} }
 local function Notify(title, text)
     StarterGui:SetCore("SendNotification", {
         Title = title,
@@ -13,121 +14,47 @@ local function Notify(title, text)
     })
 end
 
--- Khởi tạo UI chính
+-- 2. Khởi tạo Giao diện (Menu luôn nổi trên Black Screen)
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "UltraOptimization_V2"
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Name = "V60_Pro_Optimization"
 local p = pcall(function() ScreenGui.Parent = CoreGui end)
 if not p then ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui") end
 
--- Frame Menu (ZIndex cao để luôn hiện trên Black Screen)
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 220, 0, 280)
+MainFrame.Size = UDim2.new(0, 200, 0, 320)
 MainFrame.Position = UDim2.new(0.05, 0, 0.3, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 MainFrame.BorderSizePixel = 2
-MainFrame.ZIndex = 100 
+MainFrame.ZIndex = 100
 MainFrame.Active = true
 MainFrame.Draggable = true
 
-local Title = Instance.new("TextLabel", MainFrame)
-Title.Size = UDim2.new(1, 0, 0, 35)
-Title.Text = "ULTRA FPS BOOSTER"
-Title.TextColor3 = Color3.new(1, 1, 1)
-Title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-Title.ZIndex = 101
+-- 3. CHỖ HIỆN FPS (Cập nhật thời gian thực)
+local FPSLabel = Instance.new("TextLabel", MainFrame)
+FPSLabel.Size = UDim2.new(1, 0, 0, 40)
+FPSLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+FPSLabel.TextColor3 = Color3.new(0, 1, 0) -- Màu xanh lá
+FPSLabel.TextSize = 18
+FPSLabel.Font = Enum.Font.Code
+FPSLabel.Text = "FPS: Calculating..."
+FPSLabel.ZIndex = 101
+
+local lastUpdate = tick()
+local frameCount = 0
+RunService.RenderStepped:Connect(function()
+    frameCount = frameCount + 1
+    if tick() - lastUpdate >= 1 then
+        FPSLabel.Text = "FPS: " .. frameCount
+        frameCount = 0
+        lastUpdate = tick()
+    end
+end)
 
 local Layout = Instance.new("UIListLayout", MainFrame)
 Layout.Padding = UDim.new(0, 5)
 Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
--- Các biến trạng thái và lưu trữ để khôi phục (Revert)
-local originalData = { Materials = {}, Transparencies = {}, Effects = {} }
-local states = { FPS = false, Map = false, Black = false }
-
--- 1. Hàm SIÊU FIX LAG (Render tối thiểu)
-local function ToggleUltraFPS(state)
-    if state then
-        settings().Rendering.QualityLevel = 1
-        Lighting.GlobalShadows = false
-        Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
-        
-        for _, v in pairs(Lighting:GetDescendants()) do
-            if v:IsA("PostEffect") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") then
-                originalData.Effects[v] = v.Enabled
-                v.Enabled = false
-            end
-        end
-        
-        for _, v in pairs(Workspace:GetDescendants()) do
-            if v:IsA("BasePart") then
-                originalData.Materials[v] = v.Material
-                v.Material = Enum.Material.SmoothPlastic
-            end
-        end
-        Notify("Optimization", "Đã bật SIÊU TỐI ƯU (Max FPS).")
-    else
-        settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
-        Lighting.GlobalShadows = true
-        for effect, enabled in pairs(originalData.Effects) do
-            if effect then effect.Enabled = enabled end
-        end
-        for part, material in pairs(originalData.Materials) do
-            if part and part.Parent then part.Material = material end
-        end
-        originalData.Materials = {}
-        Notify("Optimization", "Đã khôi phục chất lượng Render.")
-    end
-end
-
--- 2. Quét mờ Map 2s/lần (Giữ va chạm)
-local mapLoop = nil
-local function ToggleMapBlur(state)
-    if state then
-        mapLoop = task.spawn(function()
-            while true do
-                for _, v in pairs(Workspace:GetDescendants()) do
-                    if v:IsA("BasePart") and not v.Parent:FindFirstChild("Humanoid") then
-                        if not originalData.Transparencies[v] then
-                            originalData.Transparencies[v] = v.Transparency
-                        end
-                        v.Transparency = 0.9
-                    end
-                end
-                task.wait(2) -- Quét lại mỗi 2 giây
-            end
-        end)
-        Notify("Map Scan", "Đã bật quét mờ map 2s/lần.")
-    else
-        if mapLoop then task.cancel(mapLoop) end
-        for part, trans in pairs(originalData.Transparencies) do
-            if part and part.Parent then part.Transparency = trans end
-        end
-        originalData.Transparencies = {}
-        Notify("Map Scan", "Đã dừng quét map.")
-    end
-end
-
--- 3. Black Screen (Menu vẫn hiện)
-local blackFrame = nil
-local function ToggleBlackScreen(state)
-    if state then
-        if not blackFrame then
-            blackFrame = Instance.new("Frame", ScreenGui)
-            blackFrame.Size = UDim2.new(10, 0, 10, 0)
-            blackFrame.Position = UDim2.new(-5, 0, -5, 0)
-            blackFrame.BackgroundColor3 = Color3.new(0, 0, 0)
-            blackFrame.ZIndex = 50 -- Thấp hơn MainFrame (100)
-        end
-        blackFrame.Visible = true
-        Notify("Black Screen", "Đã bật màn hình đen (Tiết kiệm pin).")
-    else
-        if blackFrame then blackFrame.Visible = false end
-        Notify("Black Screen", "Đã tắt màn hình đen.")
-    end
-end
-
--- Hàm tạo nút
+-- 4. Các chức năng chính
 local function CreateButton(text, callback)
     local btn = Instance.new("TextButton", MainFrame)
     btn.Size = UDim2.new(0.9, 0, 0, 40)
@@ -140,14 +67,94 @@ local function CreateButton(text, callback)
     local active = false
     btn.MouseButton1Click:Connect(function()
         active = not active
-        btn.BackgroundColor3 = active and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(60, 60, 60)
+        btn.BackgroundColor3 = active and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(60, 60, 60)
         callback(active)
     end)
 end
 
--- Thêm các nút chức năng
-CreateButton("Siêu Fix Lag (Max)", ToggleUltraFPS)
-CreateButton("Quét Mờ Map (2s)", ToggleMapBlur)
-CreateButton("Black Screen (AFK)", ToggleBlackScreen)
+-- Mở khóa 120 FPS
+if setfpscap then setfpscap(120) end
 
-Notify("Script Loaded", "Hệ thống tối ưu đã sẵn sàng.")
+-- Nút: Tối ưu Render (Max FPS)
+CreateButton("Boost FPS 120 FPS", function(state)
+    if state then
+        Lighting.GlobalShadows = false
+        for _, v in pairs(Workspace:GetDescendants()) do
+            if v:IsA("BasePart") then
+                originalProperties.Materials[v] = v.Material
+                v.Material = Enum.Material.SmoothPlastic
+            elseif v:IsA("Decal") or v:IsA("Texture") then
+                originalProperties.Transparencies[v] = v.Transparency
+                v.Transparency = 1
+            end
+        end
+        Notify("FPS Boost", "Đã bật tối ưu 100% (Smooth Plastic).")
+    else
+        for part, mat in pairs(originalProperties.Materials) do
+            if part and part.Parent then part.Material = mat end
+        end
+        for tex, trans in pairs(originalProperties.Transparencies) do
+            if tex and tex.Parent then tex.Transparency = trans end
+        end
+        Notify("FPS Boost", "Đã khôi phục trạng thái gốc.")
+    end
+end)
+
+-- Nút: Quét Mờ Map (2s/lần)
+local mapLoop = nil
+CreateButton("Quét Mờ Map (2s)", function(state)
+    if state then
+        mapLoop = task.spawn(function()
+            while true do
+                for _, v in pairs(Workspace:GetDescendants()) do
+                    if v:IsA("BasePart") and not v.Parent:FindFirstChild("Humanoid") then
+                        v.Transparency = 0.9
+                    end
+                end
+                task.wait(2)
+            end
+        end)
+        Notify("Map", "Đã bắt đầu quét mờ map liên tục.")
+    else
+        if mapLoop then task.cancel(mapLoop) end
+        Notify("Map", "Đã dừng quét mờ map.")
+    end
+end)
+
+-- Nút: Xóa Dame Nổi
+CreateButton("Xóa Dame Nổi", function(state)
+    if state then
+        RunService:BindToRenderStep("NoDame", 1, function()
+            for _, v in pairs(Workspace:GetDescendants()) do
+                if v:IsA("BillboardGui") and (v.Name:lower():find("damage") or v.Name:lower():find("dame")) then
+                    v.Enabled = false
+                end
+            end
+        end)
+        Notify("Dame", "Đã ẩn toàn bộ sát thương nổi.")
+    else
+        RunService:UnbindFromRenderStep("NoDame")
+        Notify("Dame", "Đã hiện lại sát thương nổi.")
+    end
+end)
+
+-- Nút: Black Screen (Menu vẫn hiện)
+local blackFrame = nil
+CreateButton("Black Screen", function(state)
+    if state then
+        if not blackFrame then
+            blackFrame = Instance.new("Frame", ScreenGui)
+            blackFrame.Size = UDim2.new(10, 0, 10, 0)
+            blackFrame.Position = UDim2.new(-5, 0, -5, 0)
+            blackFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+            blackFrame.ZIndex = 50 -- Nằm dưới menu (100)
+        end
+        blackFrame.Visible = true
+        Notify("AFK Mode", "Màn hình đen đã bật.")
+    else
+        if blackFrame then blackFrame.Visible = false end
+        Notify("AFK Mode", "Màn hình đen đã tắt.")
+    end
+end)
+
+Notify("V60 System", "Script đã sẵn sàng!")
