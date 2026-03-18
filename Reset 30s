@@ -1,39 +1,50 @@
 local Player = game:GetService("Players").LocalPlayer
 local Character = Player.Character or Player.CharacterAdded:Wait()
 local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
 
--- Cấu hình GUI (Nhỏ gọn hơn)
+-- Cấu hình GUI
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "MiniResetMenu"
 ScreenGui.ResetOnSpawn = false 
 ScreenGui.Parent = Player:WaitForChild("PlayerGui")
 
 local Frame = Instance.new("Frame")
-Frame.Size = UDim2.new(0, 150, 0, 70) -- Kích thước nhỏ lại
+Frame.Size = UDim2.new(0, 160, 0, 90) -- Tăng nhẹ chiều cao để hiện số lần chết
 Frame.Position = UDim2.new(0.8, 0, 0.1, 0)
 Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 Frame.BorderSizePixel = 0
-Frame.Active = true -- Cho phép tương tác để di chuyển
+Frame.Active = true
 Frame.Parent = ScreenGui
 
--- Bo góc cho Menu
 local Corner = Instance.new("UICorner")
 Corner.CornerRadius = UDim.new(0, 8)
 Corner.Parent = Frame
 
 local StatusLabel = Instance.new("TextLabel")
-StatusLabel.Size = UDim2.new(1, 0, 0, 30)
+StatusLabel.Size = UDim2.new(1, 0, 0, 25)
 StatusLabel.Position = UDim2.new(0, 0, 0, 5)
-StatusLabel.Text = "Đứng im: 0s / 30s"
+StatusLabel.Text = "Đứng im: 0s / 50s"
 StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 StatusLabel.BackgroundTransparency = 1
-StatusLabel.TextSize = 12
+StatusLabel.TextSize = 11
 StatusLabel.Font = Enum.Font.SourceSansBold
 StatusLabel.Parent = Frame
 
+local DeathLabel = Instance.new("TextLabel")
+DeathLabel.Size = UDim2.new(1, 0, 0, 20)
+DeathLabel.Position = UDim2.new(0, 0, 0, 30)
+DeathLabel.Text = "Lần chết liên tục: 0/3"
+DeathLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+DeathLabel.BackgroundTransparency = 1
+DeathLabel.TextSize = 11
+DeathLabel.Font = Enum.Font.SourceSans
+DeathLabel.Parent = Frame
+
 local ToggleButton = Instance.new("TextButton")
 ToggleButton.Size = UDim2.new(0.9, 0, 0, 25)
-ToggleButton.Position = UDim2.new(0.05, 0, 0, 35)
+ToggleButton.Position = UDim2.new(0.05, 0, 0, 55)
 ToggleButton.TextSize = 12
 ToggleButton.Font = Enum.Font.SourceSans
 ToggleButton.Parent = Frame
@@ -46,27 +57,46 @@ BtnCorner.Parent = ToggleButton
 local isEnabled = true 
 local idleTime = 0
 local maxIdle = 50
+local deathCount = 0 -- Bộ đếm số lần chết
 local lastPosition = Vector3.new(0, 0, 0)
 
--- HÀM DI CHUYỂN MENU (DRAGGABLE)
+-- HÀM SERVER HOP (TÌM SERVER ĐÔNG NGƯỜI)
+local function ServerHop()
+    print("Thông báo: Đang tìm Server đông người để Hop...")
+    local PlaceId = game.PlaceId
+    local Servers = {}
+    local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
+    
+    local success, result = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet(url))
+    end)
+    
+    if success and result and result.data then
+        for _, s in pairs(result.data) do
+            -- Chọn server có nhiều người nhưng chưa full (chừa 2 chỗ trống)
+            if s.playing < s.maxPlayers and s.playing > 10 and s.id ~= game.JobId then
+                table.insert(Servers, s.id)
+            end
+        end
+    end
+    
+    if #Servers > 0 then
+        TeleportService:TeleportToPlaceInstance(PlaceId, Servers[math.random(1, #Servers)], Player)
+    else
+        print("Không tìm thấy server phù hợp, đang thử lại...")
+        TeleportService:Teleport(PlaceId, Player) -- Cứ nhảy server đại
+    end
+end
+
+-- HÀM DI CHUYỂN MENU
 local dragging, dragInput, dragStart, startPos
 Frame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = Frame.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
+        dragging = true; dragStart = input.Position; startPos = Frame.Position
+        input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
     end
 end)
-Frame.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
-    end
-end)
+Frame.InputChanged:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end end)
 UserInputService.InputChanged:Connect(function(input)
     if input == dragInput and dragging then
         local delta = input.Position - dragStart
@@ -74,17 +104,17 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- HÀM CẬP NHẬT TRẠNG THÁI
+-- CẬP NHẬT TRẠNG THÁI
 local function updateVisuals()
     if isEnabled then
         ToggleButton.Text = "TRẠNG THÁI: BẬT"
         ToggleButton.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
-        print("Thông báo: Hệ thống Reset tự động đã được KÍCH HOẠT.")
+        print("Hệ thống: BẬT.")
     else
         ToggleButton.Text = "TRẠNG THÁI: TẮT"
         ToggleButton.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
         StatusLabel.Text = "Đang tạm dừng"
-        print("Thông báo: Hệ thống Reset tự động đã BỊ VÔ HIỆU HÓA.")
+        print("Hệ thống: TẮT.")
     end
 end
 
@@ -96,7 +126,7 @@ ToggleButton.MouseButton1Click:Connect(function()
     updateVisuals()
 end)
 
--- VÒNG LẶP KIỂM TRA
+-- VÒNG LẶP KIỂM TRA ĐỨNG IM
 task.spawn(function()
     while true do
         task.wait(1)
@@ -114,7 +144,7 @@ task.spawn(function()
             if idleTime >= maxIdle then
                 local hum = Character:FindFirstChildOfClass("Humanoid")
                 if hum then
-                    print("Thông báo: Tự động Reset nhân vật.")
+                    print("Thông báo: Tự động Reset do đứng im.")
                     hum.Health = 0
                 end
                 idleTime = 0
@@ -123,8 +153,38 @@ task.spawn(function()
     end
 end)
 
+-- XỬ LÝ KHI CHẾT LIÊN TỤC
 Player.CharacterAdded:Connect(function(newChar)
     Character = newChar
     idleTime = 0
     lastPosition = Vector3.new(0,0,0)
+    
+    local hum = newChar:WaitForChild("Humanoid")
+    hum.Died:Connect(function()
+        if isEnabled then
+            deathCount = deathCount + 1
+            DeathLabel.Text = "Lần chết liên tục: " .. deathCount .. "/3"
+            
+            if deathCount >= 3 then
+                DeathLabel.Text = "Đang đổi Server..."
+                task.wait(1)
+                ServerHop()
+            end
+        end
+    end)
+end)
+
+-- Reset bộ đếm lần chết nếu di chuyển được xa (chứng tỏ không bị farm chết tại chỗ)
+task.spawn(function()
+    while true do
+        task.wait(5)
+        local root = Character:FindFirstChild("HumanoidRootPart")
+        if root and isEnabled then
+            -- Nếu di chuyển được một khoảng cách nhất định, reset bộ đếm lần chết
+            if (root.Position - lastPosition).Magnitude > 50 then
+                deathCount = 0
+                DeathLabel.Text = "Lần chết liên tục: 0/3"
+            end
+        end
+    end
 end)
