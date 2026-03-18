@@ -45,7 +45,7 @@ BtnCorner.Parent = ToggleButton
 -- BIẾN ĐIỀU KHIỂN
 local isEnabled = true 
 local idleTime = 0
-local maxIdle = 30
+local maxIdle = 50
 local lastPosition = Vector3.new(0, 0, 0)
 
 -- HÀM DI CHUYỂN MENU (DRAGGABLE)
