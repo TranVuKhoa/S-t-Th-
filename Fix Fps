@@ -4,8 +4,7 @@ local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
 local CoreGui = game:GetService("CoreGui")
 
--- 1. Hệ thống thông báo & Khôi phục (Revert)
-local originalProperties = { Materials = {}, Transparencies = {}, Effects = {} }
+-- 1. Hệ thống thông báo & Khôi phục
 local function Notify(title, text)
     StarterGui:SetCore("SendNotification", {
         Title = title,
@@ -14,14 +13,17 @@ local function Notify(title, text)
     })
 end
 
--- 2. Khởi tạo Giao diện (Menu luôn nổi trên Black Screen)
+local originalProperties = { Materials = {}, Transparencies = {} }
+local connections = { map = nil, dame = nil }
+
+-- 2. Khởi tạo Giao diện
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "V60_Pro_Optimization"
 local p = pcall(function() ScreenGui.Parent = CoreGui end)
 if not p then ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui") end
 
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 200, 0, 320)
+MainFrame.Size = UDim2.new(0, 200, 0, 250)
 MainFrame.Position = UDim2.new(0.05, 0, 0.3, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 MainFrame.BorderSizePixel = 2
@@ -29,14 +31,18 @@ MainFrame.ZIndex = 100
 MainFrame.Active = true
 MainFrame.Draggable = true
 
--- 3. CHỖ HIỆN FPS (Cập nhật thời gian thực)
+local Layout = Instance.new("UIListLayout", MainFrame)
+Layout.Padding = UDim.new(0, 5)
+Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+-- 3. BỘ ĐẾM FPS (Cập nhật theo giây)
 local FPSLabel = Instance.new("TextLabel", MainFrame)
 FPSLabel.Size = UDim2.new(1, 0, 0, 40)
 FPSLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-FPSLabel.TextColor3 = Color3.new(0, 1, 0) -- Màu xanh lá
+FPSLabel.TextColor3 = Color3.new(0, 1, 0)
 FPSLabel.TextSize = 18
 FPSLabel.Font = Enum.Font.Code
-FPSLabel.Text = "FPS: Calculating..."
+FPSLabel.Text = "FPS: ..."
 FPSLabel.ZIndex = 101
 
 local lastUpdate = tick()
@@ -50,111 +56,104 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-local Layout = Instance.new("UIListLayout", MainFrame)
-Layout.Padding = UDim.new(0, 5)
-Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-
--- 4. Các chức năng chính
-local function CreateButton(text, callback)
+-- 4. Hàm tạo nút bấm (Hỗ trợ Auto-Start)
+local function CreateButton(text, autoStart, callback)
     local btn = Instance.new("TextButton", MainFrame)
-    btn.Size = UDim2.new(0.9, 0, 0, 40)
+    btn.Size = UDim2.new(0.9, 0, 0, 35)
     btn.Text = text
-    btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    btn.BackgroundColor3 = autoStart and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(60, 60, 60)
     btn.TextColor3 = Color3.new(1, 1, 1)
     btn.Font = Enum.Font.SourceSansBold
     btn.ZIndex = 101
     
-    local active = false
-    btn.MouseButton1Click:Connect(function()
-        active = not active
+    local active = autoStart
+    local function Toggle(state)
+        active = state
         btn.BackgroundColor3 = active and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(60, 60, 60)
-        callback(active)
+        task.spawn(function() callback(active) end)
+    end
+
+    btn.MouseButton1Click:Connect(function()
+        Toggle(not active)
     end)
+    
+    if autoStart then task.spawn(function() callback(true) end) end
 end
 
 -- Mở khóa 120 FPS
 if setfpscap then setfpscap(120) end
 
--- Nút: Tối ưu Render (Max FPS)
-CreateButton("Boost FPS 120 FPS", function(state)
+-- Nút 1: Boost FPS (Auto)
+CreateButton("Boost FPS 120", true, function(state)
     if state then
         Lighting.GlobalShadows = false
         for _, v in pairs(Workspace:GetDescendants()) do
             if v:IsA("BasePart") then
-                originalProperties.Materials[v] = v.Material
+                if not originalProperties.Materials[v] then originalProperties.Materials[v] = v.Material end
                 v.Material = Enum.Material.SmoothPlastic
             elseif v:IsA("Decal") or v:IsA("Texture") then
-                originalProperties.Transparencies[v] = v.Transparency
+                if not originalProperties.Transparencies[v] then originalProperties.Transparencies[v] = v.Transparency end
                 v.Transparency = 1
             end
         end
-        Notify("FPS Boost", "Đã bật tối ưu 100% (Smooth Plastic).")
+        Notify("FPS Boost", "Đã bật tối ưu mượt nhất.")
     else
         for part, mat in pairs(originalProperties.Materials) do
             if part and part.Parent then part.Material = mat end
         end
-        for tex, trans in pairs(originalProperties.Transparencies) do
-            if tex and tex.Parent then tex.Transparency = trans end
+        Notify("FPS Boost", "Đã khôi phục đồ họa.")
+    end
+end)
+
+-- Nút 2: Mờ Map (Auto - Tối ưu mới)
+CreateButton("Làm Mờ Map", true, function(state)
+    if state then
+        for _, v in pairs(Workspace:GetDescendants()) do
+            if v:IsA("BasePart") and not v.Parent:FindFirstChild("Humanoid") then v.Transparency = 0.9 end
         end
-        Notify("FPS Boost", "Đã khôi phục trạng thái gốc.")
+        connections.map = Workspace.DescendantAdded:Connect(function(v)
+            if v:IsA("BasePart") and not v.Parent:FindFirstChild("Humanoid") then v.Transparency = 0.9 end
+        end)
+        Notify("Map", "Đã làm mờ cảnh vật.")
+    else
+        if connections.map then connections.map:Disconnect() end
+        Notify("Map", "Đã khôi phục độ mờ.")
     end
 end)
 
--- Nút: Quét Mờ Map (2s/lần)
-local mapLoop = nil
-CreateButton("Quét Mờ Map (2s)", function(state)
+-- Nút 3: Xóa Dame Nổi (Auto - Tối ưu mới)
+CreateButton("Xóa Dame Nổi", true, function(state)
     if state then
-        mapLoop = task.spawn(function()
-            while true do
-                for _, v in pairs(Workspace:GetDescendants()) do
-                    if v:IsA("BasePart") and not v.Parent:FindFirstChild("Humanoid") then
-                        v.Transparency = 0.9
-                    end
-                end
-                task.wait(2)
-            end
+        for _, v in pairs(Workspace:GetDescendants()) do
+            if v:IsA("BillboardGui") and (v.Name:lower():find("damage") or v.Name:lower():find("dame")) then v.Enabled = false end
+        end
+        connections.dame = Workspace.DescendantAdded:Connect(function(v)
+            if v:IsA("BillboardGui") and (v.Name:lower():find("damage") or v.Name:lower():find("dame")) then v.Enabled = false end
         end)
-        Notify("Map", "Đã bắt đầu quét mờ map liên tục.")
+        Notify("Dame", "Đã xóa sát thương nổi.")
     else
-        if mapLoop then task.cancel(mapLoop) end
-        Notify("Map", "Đã dừng quét mờ map.")
-    end
-end)
-
--- Nút: Xóa Dame Nổi
-CreateButton("Xóa Dame Nổi", function(state)
-    if state then
-        RunService:BindToRenderStep("NoDame", 1, function()
-            for _, v in pairs(Workspace:GetDescendants()) do
-                if v:IsA("BillboardGui") and (v.Name:lower():find("damage") or v.Name:lower():find("dame")) then
-                    v.Enabled = false
-                end
-            end
-        end)
-        Notify("Dame", "Đã ẩn toàn bộ sát thương nổi.")
-    else
-        RunService:UnbindFromRenderStep("NoDame")
+        if connections.dame then connections.dame:Disconnect() end
         Notify("Dame", "Đã hiện lại sát thương nổi.")
     end
 end)
 
--- Nút: Black Screen (Menu vẫn hiện)
+-- Nút 4: Black Screen (Off)
 local blackFrame = nil
-CreateButton("Black Screen", function(state)
+CreateButton("Black Screen", false, function(state)
     if state then
         if not blackFrame then
             blackFrame = Instance.new("Frame", ScreenGui)
             blackFrame.Size = UDim2.new(10, 0, 10, 0)
             blackFrame.Position = UDim2.new(-5, 0, -5, 0)
             blackFrame.BackgroundColor3 = Color3.new(0, 0, 0)
-            blackFrame.ZIndex = 50 -- Nằm dưới menu (100)
+            blackFrame.ZIndex = 50
         end
         blackFrame.Visible = true
-        Notify("AFK Mode", "Màn hình đen đã bật.")
+        Notify("AFK", "Màn hình đen bật.")
     else
         if blackFrame then blackFrame.Visible = false end
-        Notify("AFK Mode", "Màn hình đen đã tắt.")
+        Notify("AFK", "Màn hình đen tắt.")
     end
 end)
 
-Notify("V60 System", "Script đã sẵn sàng!")
+Notify("V60 Pro", "Đã tự động kích hoạt tối ưu!")
