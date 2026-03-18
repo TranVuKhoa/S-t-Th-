@@ -1,0 +1,139 @@
+--Fix Fps
+local StarterGui = game:GetService("StarterGui")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+local CoreGui = game:GetService("CoreGui")
+
+-- Hàm hiển thị thông báo
+local function sendNotification(title, text)
+    StarterGui:SetCore("SendNotification", {
+        Title = title;
+        Text = text;
+        Duration = 3;
+    })
+end
+
+-- Khởi tạo UI chính
+local ScreenGui = Instance.new("ScreenGui")
+local p = pcall(function() ScreenGui.Parent = CoreGui end)
+if not p then ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui") end
+
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 200, 0, 250)
+MainFrame.Position = UDim2.new(0.05, 0, 0.3, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+MainFrame.Active = true
+MainFrame.Draggable = true -- Cho phép kéo thả menu
+
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.Text = "Menu Tối Ưu"
+Title.Font = Enum.Font.Code
+
+-- Các biến lưu trạng thái và dữ liệu gốc
+local states = {
+    FPS = false,
+    Map = false,
+    Dame = false,
+    BlackScreen = false
+}
+local originalTransparencies = {}
+local blackFrame = nil
+
+-- Hàm tạo nút bấm
+local function createButton(name, text, posY, callback)
+    local btn = Instance.new("TextButton", MainFrame)
+    btn.Size = UDim2.new(0.9, 0, 0, 35)
+    btn.Position = UDim2.new(0.05, 0, 0, posY)
+    btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Text = text
+    btn.Font = Enum.Font.SourceSansBold
+    
+    btn.MouseButton1Click:Connect(function()
+        states[name] = not states[name]
+        if states[name] then
+            btn.BackgroundColor3 = Color3.fromRGB(0, 150, 0) -- Xanh lá khi bật
+        else
+            btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60) -- Xám khi tắt
+        end
+        callback(states[name])
+    end)
+end
+
+-- 1. Chức năng Boost FPS
+createButton("FPS", "Bật/Tắt Boost FPS", 40, function(state)
+    if state then
+        Lighting.GlobalShadows = false
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        sendNotification("Boost FPS", "Đã BẬT tối ưu hóa FPS.")
+    else
+        Lighting.GlobalShadows = true
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
+        sendNotification("Boost FPS", "Đã TẮT tối ưu hóa FPS.")
+    end
+end)
+
+-- 2. Chức năng Mờ Map 90% (Vẫn đứng được)
+createButton("Map", "Bật/Tắt Mờ Map", 85, function(state)
+    if state then
+        for _, v in pairs(Workspace:GetDescendants()) do
+            if v:IsA("BasePart") and not v.Parent:FindFirstChild("Humanoid") then
+                originalTransparencies[v] = v.Transparency
+                v.Transparency = 0.9 -- Làm mờ 90%, giữ nguyên CanCollide để không bị lọt
+            end
+        end
+        sendNotification("Mờ Map", "Đã BẬT mờ map 90% (giữ va chạm).")
+    else
+        -- Khôi phục trạng thái gốc
+        for part, trans in pairs(originalTransparencies) do
+            if part and part.Parent then
+                part.Transparency = trans
+            end
+        end
+        originalTransparencies = {}
+        sendNotification("Mờ Map", "Đã TẮT mờ map, khôi phục trạng thái gốc.")
+    end
+end)
+
+-- 3. Chức năng Xóa Dame Nổi (Ẩn BillboardGui/TextLabel sát thương)
+createButton("Dame", "Bật/Tắt Xóa Dame", 130, function(state)
+    -- Lưu ý: Cách hiển thị dame tùy thuộc vào từng game (thường là BillboardGui trong Workspace)
+    if state then
+        game:GetService("RunService"):BindToRenderStep("HideDamage", 1, function()
+            for _, v in pairs(Workspace:GetDescendants()) do
+                if v:IsA("BillboardGui") and v.Name:lower():match("damage") then
+                    v.Enabled = false
+                end
+            end
+        end)
+        sendNotification("Xóa Dame Nổi", "Đã BẬT ẩn sát thương.")
+    else
+        game:GetService("RunService"):UnbindFromRenderStep("HideDamage")
+        sendNotification("Xóa Dame Nổi", "Đã TẮT ẩn sát thương.")
+    end
+end)
+
+-- 4. Chức năng Black Screen (Treo máy)
+createButton("BlackScreen", "Bật/Tắt Black Screen", 175, function(state)
+    if state then
+        if not blackFrame then
+            blackFrame = Instance.new("Frame", ScreenGui)
+            blackFrame.Size = UDim2.new(10, 0, 10, 0)
+            blackFrame.Position = UDim2.new(-5, 0, -5, 0)
+            blackFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+            blackFrame.ZIndex = 9999
+        end
+        blackFrame.Visible = true
+        sendNotification("Màn Hình Đen", "Đã BẬT Black Screen để treo máy.")
+    else
+        if blackFrame then
+            blackFrame.Visible = false
+        end
+        sendNotification("Màn Hình Đen", "Đã TẮT Black Screen.")
+    end
+end)
+
+sendNotification("Script Loaded", "Menu Tối Ưu đã sẵn sàng!")
