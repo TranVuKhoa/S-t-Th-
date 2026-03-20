@@ -60,13 +60,14 @@ local maxIdle = 50
 local deathCount = 0 
 local lastPosition = Vector3.new(0, 0, 0)
 
--- HÀM SERVER HOP NÂNG CẤP (CHỐNG QUAY LẠI SERVER CŨ)
+-- HÀM SERVER HOP (TÌM SERVER 7 NGƯỜI)
 local function ServerHop()
-    DeathLabel.Text = "Đang tìm Server mới..."
+    DeathLabel.Text = "Đang tìm Server 7 người..."
     DeathLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
     
     local PlaceId = game.PlaceId
     local currentJobId = game.JobId
+    -- Lấy danh sách server (ưu tiên số lượng người chơi giảm dần)
     local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
     
     local success, result = pcall(function()
@@ -74,19 +75,28 @@ local function ServerHop()
     end)
     
     if success and result and result.data then
-        local targetServers = {}
+        local exact7 = {}
+        local near7 = {}
+
         for _, s in pairs(result.data) do
-            -- Lọc: Không phải server này, còn chỗ trống, và có trên 5 người chơi
-            if s.id ~= currentJobId and s.playing < s.maxPlayers - 1 and s.playing > 5 then
-                table.insert(targetServers, s.id)
+            -- Chỉ xét server khác server hiện tại và còn chỗ
+            if s.id ~= currentJobId and s.playing < s.maxPlayers then
+                if s.playing == 7 then
+                    table.insert(exact7, s.id)
+                elseif s.playing >= 5 and s.playing <= 9 then
+                    table.insert(near7, s.id)
+                end
             end
         end
         
-        if #targetServers > 0 then
-            local randomServer = targetServers[math.random(1, #targetServers)]
-            TeleportService:TeleportToPlaceInstance(PlaceId, randomServer, Player)
+        -- Ưu tiên 1: Server có đúng 7 người
+        if #exact7 > 0 then
+            TeleportService:TeleportToPlaceInstance(PlaceId, exact7[math.random(1, #exact7)], Player)
+        -- Ưu tiên 2: Server từ 5-9 người
+        elseif #near7 > 0 then
+            TeleportService:TeleportToPlaceInstance(PlaceId, near7[math.random(1, #near7)], Player)
         else
-            -- Nếu không tìm thấy server lý tưởng, ép buộc nhảy đại
+            -- Nếu không tìm thấy, tự động nhảy server bất kỳ
             TeleportService:Teleport(PlaceId, Player)
         end
     else
@@ -94,23 +104,26 @@ local function ServerHop()
     end
 end
 
--- HÀM DI CHUYỂN MENU
+-- DI CHUYỂN GUI
 local dragging, dragInput, dragStart, startPos
 Frame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = true; dragStart = input.Position; startPos = Frame.Position
-        input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
     end
 end)
-Frame.InputChanged:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end end)
 UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
         local delta = input.Position - dragStart
         Frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
 
--- CẬP NHẬT TRẠNG THÁI & REVERT STATE
+-- CẬP NHẬT TRẠNG THÁI & RESET DỮ LIỆU
 local function updateVisuals()
     if isEnabled then
         ToggleButton.Text = "TRẠNG THÁI: BẬT"
@@ -119,7 +132,6 @@ local function updateVisuals()
         ToggleButton.Text = "TRẠNG THÁI: TẮT"
         ToggleButton.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
         StatusLabel.Text = "Đang tạm dừng"
-        -- Revert: Đưa các thông số về ban đầu khi tắt
         idleTime = 0
         deathCount = 0
         DeathLabel.Text = "Lần chết liên tục: 0/3"
@@ -127,69 +139,43 @@ local function updateVisuals()
 end
 
 updateVisuals()
-
 ToggleButton.MouseButton1Click:Connect(function()
     isEnabled = not isEnabled
     updateVisuals()
 end)
 
--- VÒNG LẶP KIỂM TRA ĐỨNG IM
+-- KIỂM TRA ĐỨNG IM
 task.spawn(function()
     while true do
         task.wait(1)
         if Character and Character:FindFirstChild("HumanoidRootPart") and isEnabled then
-            local root = Character.HumanoidRootPart
-            local currentPos = root.Position
-            
+            local currentPos = Character.HumanoidRootPart.Position
             if (currentPos - lastPosition).Magnitude < 0.5 then
                 idleTime = idleTime + 1
             else
                 idleTime = 0
             end
-            
             lastPosition = currentPos
             StatusLabel.Text = "Đứng im: " .. idleTime .. "s / " .. maxIdle .. "s"
             
             if idleTime >= maxIdle then
                 local hum = Character:FindFirstChildOfClass("Humanoid")
-                if hum then
-                    hum.Health = 0 -- Tự reset
-                end
+                if hum then hum.Health = 0 end
                 idleTime = 0
             end
         end
     end
 end)
 
--- XỬ LÝ KHI CHẾT LIÊN TỤC
+-- XỬ LÝ KHI CHẾT/HỒI SINH
 Player.CharacterAdded:Connect(function(newChar)
     Character = newChar
-    idleTime = 0
-    
     local hum = newChar:WaitForChild("Humanoid")
     hum.Died:Connect(function()
         if isEnabled then
             deathCount = deathCount + 1
             DeathLabel.Text = "Lần chết liên tục: " .. deathCount .. "/3"
-            
-            if deathCount >= 3 then
-                ServerHop()
-            end
+            if deathCount >= 3 then ServerHop() end
         end
     end)
-end)
-
--- Reset bộ đếm lần chết nếu người chơi di chuyển thoát khỏi vùng farm
-task.spawn(function()
-    while true do
-        task.wait(5)
-        if Character and Character:FindFirstChild("HumanoidRootPart") and isEnabled then
-            local root = Character.HumanoidRootPart
-            -- Nếu trong 5 giây di chuyển được > 50 studs, coi như không bị farm
-            if (root.Position - lastPosition).Magnitude > 50 then
-                deathCount = 0
-                DeathLabel.Text = "Lần chết liên tục: 0/3"
-            end
-        end
-    end
 end)
