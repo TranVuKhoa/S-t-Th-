@@ -139,7 +139,7 @@ end)
 
 -- Nút 4: Black Screen (Off)
 local blackFrame = nil
-CreateButton("Black Screen", false, function(state)
+CreateButton("Black Screen", true, function(state)
     if state then
         if not blackFrame then
             blackFrame = Instance.new("Frame", ScreenGui)
