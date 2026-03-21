@@ -106,7 +106,7 @@ CreateButton("Boost FPS 120", true, function(state)
 end)
 
 -- Nút 2: Mờ Map (Auto - Tối ưu mới)
-CreateButton("Làm Mờ Map", true, function(state)
+CreateButton("Làm Mờ Map", false, function(state)
     if state then
         for _, v in pairs(Workspace:GetDescendants()) do
             if v:IsA("BasePart") and not v.Parent:FindFirstChild("Humanoid") then v.Transparency = 0.9 end
@@ -122,7 +122,7 @@ CreateButton("Làm Mờ Map", true, function(state)
 end)
 
 -- Nút 3: Xóa Dame Nổi (Auto - Tối ưu mới)
-CreateButton("Xóa Dame Nổi", true, function(state)
+CreateButton("Xóa Dame Nổi", false, function(state)
     if state then
         for _, v in pairs(Workspace:GetDescendants()) do
             if v:IsA("BillboardGui") and (v.Name:lower():find("damage") or v.Name:lower():find("dame")) then v.Enabled = false end
@@ -139,7 +139,7 @@ end)
 
 -- Nút 4: Black Screen (Off)
 local blackFrame = nil
-CreateButton("Black Screen", true, function(state)
+CreateButton("Black Screen", false, function(state)
     if state then
         if not blackFrame then
             blackFrame = Instance.new("Frame", ScreenGui)
